@@ -104,29 +104,7 @@ mbus_serial_connect(char *device)
         return NULL;
     }
 
-    // Wait at most 0.2 sec.Note that it starts after first received byte!!
-    // I.e. if CMIN>0 and there are no data we would still wait forever...
-    //
-    // The specification mentions link layer response timeout this way:
-    // The time structure of various link layer communication types is described in EN60870-5-1. The answer time
-    // between the end of a master send telegram and the beginning of the response telegram of the slave shall be
-    // between 11 bit times and (330 bit times + 50ms).
-    //
-    // For 2400Bd this means (330 + 11) / 2400 + 0.05 = 188.75 ms (added 11 bit periods to receive first byte).
-    // I.e. timeout of 0.2s seems appropriate for 2400Bd.
-
-    COMMTIMEOUTS commTimeouts = {0};
-    commTimeouts.ReadIntervalTimeout = 200;
-    commTimeouts.ReadTotalTimeoutMultiplier = 0;
-    commTimeouts.ReadTotalTimeoutConstant = 0;
-    commTimeouts.WriteTotalTimeoutMultiplier = 0;
-    commTimeouts.WriteTotalTimeoutConstant = 0;
-
-    if (!SetCommTimeouts(handle->hSerial, &commTimeouts))
-    {
-        fprintf(stderr, "%s: error setting serial port timeouts.\n", __PRETTY_FUNCTION__);
-        return NULL;
-    }
+    mbus_serial_set_timeout(handle, 200);	//200ms default
     
     return handle;
 }
@@ -176,8 +154,42 @@ mbus_serial_set_baudrate(mbus_serial_handle *handle, int baudrate)
         fprintf(stderr, "%s: error setting serial port state.\n", __PRETTY_FUNCTION__);
         return -1;
     }
+
+    return 0;
 }
 
+//------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
+int
+mbus_serial_set_timeout(mbus_serial_handle *handle, int timeout)
+{
+	// Wait at most 0.2 sec.Note that it starts after first received byte!!
+	// I.e. if CMIN>0 and there are no data we would still wait forever...
+	//
+	// The specification mentions link layer response timeout this way:
+	// The time structure of various link layer communication types is described in EN60870-5-1. The answer time
+	// between the end of a master send telegram and the beginning of the response telegram of the slave shall be
+	// between 11 bit times and (330 bit times + 50ms).
+	//
+	// For 2400Bd this means (330 + 11) / 2400 + 0.05 = 188.75 ms (added 11 bit periods to receive first byte).
+	// I.e. timeout of 0.2s seems appropriate for 2400Bd.
+
+	COMMTIMEOUTS commTimeouts = {0};
+	commTimeouts.ReadIntervalTimeout = 0;
+	commTimeouts.ReadTotalTimeoutMultiplier = 0;
+	commTimeouts.ReadTotalTimeoutConstant = timeout;
+	commTimeouts.WriteTotalTimeoutMultiplier = 0;
+	commTimeouts.WriteTotalTimeoutConstant = 0;
+
+	if (!SetCommTimeouts(handle->hSerial, &commTimeouts))
+	{
+		fprintf(stderr, "%s: error setting serial port timeouts.\n", __PRETTY_FUNCTION__);
+		return -1;
+	}
+
+	return 0;
+}
 //------------------------------------------------------------------------------
 //
 //------------------------------------------------------------------------------
@@ -249,6 +261,7 @@ mbus_serial_send_frame(mbus_serial_handle *handle, mbus_frame *frame)
       fprintf(stderr, "%s: bytes written %d\n", __PRETTY_FUNCTION__, len);
     }
 
+    return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -270,25 +283,24 @@ mbus_serial_recv_frame(mbus_serial_handle *handle, mbus_frame *frame)
     len = 0;
     
     fprintf(stderr, "%s: Read Started.\n", __PRETTY_FUNCTION__);
-    do {
+//    do {
 
-      fprintf(stderr, "%s: Read Loop.\n", __PRETTY_FUNCTION__);
+//      fprintf(stderr, "%s: Read Loop.\n", __PRETTY_FUNCTION__);
 
-        if (!ReadFile(handle->hSerial, &buff[len], remaining, &dwBytesRead, NULL))
-        {
-	  fprintf(stderr, "%s: ReadFile Failed.\n", __PRETTY_FUNCTION__);
+      if (!ReadFile(handle->hSerial, &buff[len], remaining, &dwBytesRead, NULL))
+      {
+    	  fprintf(stderr, "%s: ReadFile Failed.\n", __PRETTY_FUNCTION__);
 
-            return -1;
-        }
-	else
+    	  return -1;
+      }
+      else
 	  {
-	    fprintf(stderr, "%s: Read OK %d.\n", __PRETTY_FUNCTION__,dwBytesRead);
+    	  fprintf(stderr, "%s: Read OK %d.\n", __PRETTY_FUNCTION__,dwBytesRead);
 	  }
 
 
 	printf("READ %d :\n",dwBytesRead);
 	mbus_hexdump((const char * )&buff[len], dwBytesRead);
-        
 
         len += dwBytesRead;
         
@@ -304,7 +316,7 @@ mbus_serial_recv_frame(mbus_serial_handle *handle, mbus_frame *frame)
 	    printf("Remaining %d :\n",remaining);
 	  }
 
-    } while (remaining > 0);
+    //} while (remaining > 0);
 
     printf("Final READ %d :\n",len);
     mbus_hexdump((const char * )&buff, len);
